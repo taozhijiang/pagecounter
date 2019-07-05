@@ -1,0 +1,6 @@
+#ifndef __PAGE_COUNTER_CONFIG_H__
+#define __PAGE_COUNTER_CONFIG_H__
+
+static const char* PROGRAM_VERSION = "@PROGRAM_VERSION@";
+
+#endif // __PAGE_COUNTER_CONFIG_H__
