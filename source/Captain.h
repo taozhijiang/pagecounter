@@ -25,6 +25,8 @@ namespace tzhttpd {
 class HttpServer;
 }
 
+class StoreIf;
+
 class Captain {
 
     __noncopyable__(Captain)
@@ -51,6 +53,8 @@ public:
     std::shared_ptr<roo::Timer> timer_ptr_;
 
     std::shared_ptr<tzhttpd::HttpServer> http_server_ptr;
+
+    std::shared_ptr<StoreIf> store_ptr_;
 
 private:
     Captain();

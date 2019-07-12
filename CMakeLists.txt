@@ -74,6 +74,7 @@ add_executable( page_counter_service main.cpp setup.cpp build_version.cpp ${PROJ
 set (EXTRA_LIBS ${EXTRA_LIBS} tzhttpd Roo )
 
 set (EXTRA_LIBS ${EXTRA_LIBS} cryptopp crypto ssl config++)
+set (EXTRA_LIBS ${EXTRA_LIBS} mysqlcppconn jsoncpp)
 set (EXTRA_LIBS ${EXTRA_LIBS} pthread)
 set (EXTRA_LIBS ${EXTRA_LIBS} boost_system boost_thread boost_chrono boost_regex )
 set (EXTRA_LIBS ${EXTRA_LIBS} protoc protobuf )

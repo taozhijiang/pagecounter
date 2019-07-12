@@ -8,7 +8,11 @@ function counter_report(url, id, elem) {
         "id"    : id,
         "host"  : window.location.host,
         "uri"   : window.location.pathname,
+        "proto" : window.location.protocol,
         "origin": window.location.origin,
+        "browser"  : window.navigator.userAgent,
+        "platform" : window.navigator.platform,
+        "language" : window.navigator.language,
     };
     var content = JSON.stringify(post_data);
 
@@ -18,11 +22,10 @@ function counter_report(url, id, elem) {
     xhr.setRequestHeader('Content-type','application/json; charset=utf-8');
 
     xhr.onload = function () {
-        var counts = JSON.parse(xhr.responseText);
         if (xhr.readyState == 4 && xhr.status == "200") {
             page_counter.innerHTML = xhr.responseText;
         } else {
-            console.error(counts);
+            console.error(xhr.responseText);
         }
     }
     xhr.send(content);

@@ -21,12 +21,13 @@
 #include <tzhttpd/HttpParser.h>
 #include <tzhttpd/HttpServer.h>
 
+#include "StoreSql.h"
 #include "Captain.h"
 
 // HttpCouter中定义
 extern
 int counter_post_handler(const tzhttpd::HttpParser& http_parser, const std::string& post_body,
-                         std::string& response, std::string& status_line, std::vector<std::string>& add_header );
+                         std::string& response, std::string& status_line, std::vector<std::string>& add_header);
 
 // 在主线程中最先初始化，所以不考虑竞争条件问题
 Captain& Captain::instance() {
@@ -85,15 +86,17 @@ bool Captain::init(const std::string& cfgFile) {
         return false;
     }
 
-    // http server
-    http_server_ptr.reset(new tzhttpd::HttpServer(cfgFile, "example_main"));
-    if (!http_server_ptr ) {
-        roo::log_err("create HttpServer failed!");
+    // MySQL
+    store_ptr_.reset(new StoreSql());
+    if (!store_ptr_ || !store_ptr_->init()) {
+        roo::log_err("Create or Init StoreSql failed.");
         return false;
     }
 
-    if(!http_server_ptr->init()){
-        roo::log_err("init HttpServer failed!");
+    // http server
+    http_server_ptr.reset(new tzhttpd::HttpServer(cfgFile, "example_main"));
+    if (!http_server_ptr || !http_server_ptr->init()) {
+        roo::log_err("create or init HttpServer failed!");
         return false;
     }
 
