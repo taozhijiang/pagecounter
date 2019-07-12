@@ -28,6 +28,9 @@
 extern
 int counter_post_handler(const tzhttpd::HttpParser& http_parser, const std::string& post_body,
                          std::string& response, std::string& status_line, std::vector<std::string>& add_header);
+extern
+int jssource_get_handler(const tzhttpd::HttpParser& http_parser,
+                         std::string& response, std::string& status_line, std::vector<std::string>& add_header);
 
 // 在主线程中最先初始化，所以不考虑竞争条件问题
 Captain& Captain::instance() {
@@ -102,6 +105,7 @@ bool Captain::init(const std::string& cfgFile) {
 
     // 注册处理句柄
     http_server_ptr->add_http_post_handler("^/counter$", counter_post_handler);
+    http_server_ptr->add_http_get_handler ("^/counter.js$", jssource_get_handler);
 
     http_server_ptr->io_service_threads_.start_threads();
     http_server_ptr->service();
