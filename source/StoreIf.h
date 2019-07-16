@@ -20,6 +20,7 @@ struct visit_info {
     std::string browser_;
     std::string platf_;
     std::string lang_;
+    std::string remote_;
 
     std::string str() const {
         std::stringstream ss;
@@ -30,7 +31,8 @@ struct visit_info {
             << "origin: " << origin_ << std::endl
             << "browser: " << browser_ << std::endl
             << "platform: " << platf_ << std::endl
-            << "language: " << lang_ << std::endl;
+            << "language: " << lang_ << std::endl
+            << "remote: " << remote_ << std::endl;
 
         return ss.str();
     }

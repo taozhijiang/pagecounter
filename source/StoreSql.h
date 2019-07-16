@@ -26,6 +26,7 @@ public:
 
 private:
 
+    void check_user_agent_digest(const std::string& user_agent);
     void check_uri_digest(const std::string& host, const std::string& uri);
 
     // 数据库连接

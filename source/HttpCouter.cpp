@@ -106,6 +106,14 @@ int counter_post_handler(const tzhttpd::HttpParser& http_parser, const std::stri
         if (root.isMember("language") && root["language"].isString())
             info.lang_ = root["language"].asString();
 
+        // 记录RemoteClient
+        // 如果经过了反向代理，则取 X-Real-IP，否则就取remote_addr
+        info.remote_ = http_parser.find_request_header("X-Real-IP");
+        if (info.remote_.empty()) {
+            boost::system::error_code ignore_ec;
+            info.remote_ = http_parser.remote_.address().to_string(ignore_ec);
+        }
+
         Captain::instance().store_ptr_->insert_visit_event(info);
         int64_t c_counter = 0;
         int64_t t_counter = Captain::instance().store_ptr_->select_visit_stat(info.id_, info.host_, info.uri_, c_counter);

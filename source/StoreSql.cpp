@@ -32,7 +32,7 @@ bool StoreSql::init() {
         !setting_ptr->lookupValue("mysql.username", mysql_username) ||
         !setting_ptr->lookupValue("mysql.passwd", mysql_passwd) ||
         !setting_ptr->lookupValue("mysql.database", mysql_database)) {
-        roo::log_err("Error, get mysql config value error");
+        roo::log_err("Error, get mysql required config error");
         return false;
     }
 
@@ -68,19 +68,46 @@ void StoreSql::check_uri_digest(const std::string& host, const std::string& uri)
         return;
     }
 
-    sql = roo::va_format("SELECT 1 FROM %s.t_page_counter_uri_map WHERE F_host = '%s' AND F_uri_digest = UNHEX(MD5('%s'))",
+    sql = roo::va_format("SELECT 1 FROM %s.t_uri_map WHERE F_host = '%s' AND F_uri_digest = UNHEX(MD5('%s'))",
                          database_.c_str(), host.c_str(), uri.c_str());
     result.reset(conn->sqlconn_execute_query(sql));
     if (result && result->rowsCount() != 0)
         return;
 
     // 插入
-    sql = roo::va_format("INSERT INTO %s.t_page_counter_uri_map SET "
+    sql = roo::va_format("INSERT INTO %s.t_uri_map SET "
                          "F_host = '%s', F_uri_digest = UNHEX(MD5('%s')), F_uri_real = '%s', F_create_time=NOW()",
                          database_.c_str(), host.c_str(), uri.c_str(), uri.c_str());
     conn->sqlconn_execute_update(sql);
     roo::log_info("insert %s for host %s", uri.c_str(), host.c_str());
 }
+
+void StoreSql::check_user_agent_digest(const std::string& user_agent) {
+
+    std::string sql;
+    roo::sql_conn_ptr conn;
+    roo::shared_result_ptr result;
+
+    sql_pool_ptr_->request_scoped_conn(conn);
+    if (!conn) {
+        roo::log_err("request sql conn failed!");
+        return;
+    }
+
+    sql = roo::va_format("SELECT 1 FROM %s.t_user_agent_map WHERE F_user_agent_digest = UNHEX(MD5('%s'))",
+                         database_.c_str(), user_agent.c_str());
+    result.reset(conn->sqlconn_execute_query(sql));
+    if (result && result->rowsCount() != 0)
+        return;
+
+    // 插入
+    sql = roo::va_format("INSERT INTO %s.t_user_agent_map SET "
+                         "F_user_agent_digest = UNHEX(MD5('%s')), F_user_agent_real = '%s', F_create_time=NOW()",
+                         database_.c_str(), user_agent.c_str(), user_agent.c_str());
+    conn->sqlconn_execute_update(sql);
+    roo::log_info("insert user_agent %s", user_agent.c_str());
+}
+
 
 
 int StoreSql::insert_visit_event(const struct visit_info& stat) {
@@ -96,16 +123,18 @@ int StoreSql::insert_visit_event(const struct visit_info& stat) {
 
     // 假定参数外层已经检查OK
     check_uri_digest(stat.host_, stat.uri_);
+    check_user_agent_digest(stat.browser_);
 
     // 插入明细表
     sql = roo::va_format(
-        " INSERT INTO %s.t_page_counter_visit_detail "
+        " INSERT INTO %s.t_visit_detail "
         " SET F_id=%ld, F_host='%s', F_uri_digest=UNHEX(MD5('%s')), F_proto='%s',"
-        " F_origin='%s', F_browser='%s', F_platf='%s', F_lang='%s', "
-        " F_visit_time=NOW(); ",
+        " F_origin='%s', F_browser=UNHEX(MD5('%s')), F_platf='%s', F_lang='%s', "
+        " F_ip_addr=inet_aton('%s'), F_visit_time=NOW(); ",
         database_.c_str(),
         stat.id_, stat.host_.c_str(), stat.uri_.c_str(), stat.proto_.c_str(),
-        stat.origin_.c_str(), stat.browser_.c_str(), stat.platf_.c_str(), stat.lang_.c_str());
+        stat.origin_.c_str(), stat.browser_.c_str(), stat.platf_.c_str(),
+        stat.lang_.c_str(), stat.remote_.c_str());
 
     int affected = conn->sqlconn_execute_update(sql);
     if (affected != 1) {
@@ -114,14 +143,14 @@ int StoreSql::insert_visit_event(const struct visit_info& stat) {
 
     // 增加统计表
     sql = roo::va_format(
-        " INSERT INTO %s.t_page_counter_visit_summary "
+        " INSERT INTO %s.t_visit_summary "
         " SET F_id=%ld, F_host='%s', F_uri_digest=UNHEX(MD5('%s')), F_count=1 "
         " ON DUPLICATE KEY UPDATE F_count = F_count + 1",
         database_.c_str(), stat.id_, stat.host_.c_str(), stat.uri_.c_str());
     affected = conn->sqlconn_execute_update(sql);
 
     if (affected != 1 && affected != 2) {
-        roo::log_err("update %s.t_page_counter_visit_summary failed.", database_.c_str());
+        roo::log_err("update %s.t_visit_summary failed.", database_.c_str());
     }
 
     return 0;
@@ -141,7 +170,7 @@ int64_t StoreSql::select_visit_stat(int64_t id, const std::string& host) {
             break;
         }
 
-        sql = roo::va_format(" SELECT SUM(F_count) FROM %s.t_page_counter_visit_summary "
+        sql = roo::va_format(" SELECT SUM(F_count) FROM %s.t_visit_summary "
                              " WHERE F_id=%ld AND F_host='%s'; ",
                              database_.c_str(), id, host.c_str());
 
@@ -174,7 +203,7 @@ int64_t StoreSql::select_visit_stat(int64_t id, const std::string& host, const s
             break;
         }
 
-        sql = roo::va_format(" SELECT F_count FROM %s.t_page_counter_visit_summary "
+        sql = roo::va_format(" SELECT F_count FROM %s.t_visit_summary "
                              " WHERE F_id=%ld AND F_host='%s' AND F_uri_digest=UNHEX(MD5('%s')); ",
                              database_.c_str(), id, host.c_str(), uri.c_str());
         result.reset(conn->sqlconn_execute_query(sql));
@@ -185,7 +214,7 @@ int64_t StoreSql::select_visit_stat(int64_t id, const std::string& host, const s
         }
 
         // 总数
-        sql = roo::va_format(" SELECT IFNULL(SUM(F_count), 0) FROM %s.t_page_counter_visit_summary "
+        sql = roo::va_format(" SELECT IFNULL(SUM(F_count), 0) FROM %s.t_visit_summary "
                              " WHERE F_id=%ld AND F_host='%s'; ",
                              database_.c_str(), id, host.c_str());
 

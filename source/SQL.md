@@ -1,6 +1,6 @@
 
 // 访问汇总表
-CREATE TABLE `t_page_counter_uri_map` (
+CREATE TABLE `t_uri_map` (
   `F_host`          varchar(128) NOT NULL COMMENT '访问域名',
   `F_uri_digest`    binary(16) NOT NULL COMMENT '访问路径摘要',
   `F_uri_real`      varchar(512) NOT NULL DEFAULT '' COMMENT '真实路径',
@@ -10,7 +10,17 @@ CREATE TABLE `t_page_counter_uri_map` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 // 访问汇总表
-CREATE TABLE `t_page_counter_visit_summary` (
+CREATE TABLE `t_user_agent_map` (
+  `F_host`          varchar(128) NOT NULL COMMENT '访问域名',
+  `F_user_agent_digest` binary(16) NOT NULL COMMENT '访问路径摘要',
+  `F_user_agent_real`   varchar(512) NOT NULL DEFAULT '' COMMENT '真实路径',
+  `F_create_time`   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  
+  PRIMARY KEY (`F_host`, `F_user_agent_digest`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
+
+// 访问汇总表
+CREATE TABLE `t_visit_summary` (
 
   `F_id`           bigint(20) NOT NULL COMMENT '账号ID',
   `F_host`         varchar(128) NOT NULL COMMENT '访问域名',
@@ -22,7 +32,8 @@ CREATE TABLE `t_page_counter_visit_summary` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;
 
 // 访问明细记录表
-CREATE TABLE `t_page_counter_visit_detail` (
+// IP转数字函数inet_aton()、inet_ntoa()
+CREATE TABLE `t_visit_detail` (
   `F_increment_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   
   `F_id`           bigint(20) NOT NULL COMMENT '账号ID',
@@ -30,9 +41,10 @@ CREATE TABLE `t_page_counter_visit_detail` (
   `F_uri_digest`   binary(16) NOT NULL COMMENT '访问路径摘要',
   `F_proto`        varchar(20) NOT NULL COMMENT '访问协议',
   `F_origin`       varchar(128) NOT NULL DEFAULT '',
-  `F_browser`      varchar(128) NOT NULL DEFAULT '' COMMENT 'UserAgent',
+  `F_browser`      binary(16) NOT NULL DEFAULT '' COMMENT 'UserAgent',
   `F_platf`        varchar(64) NOT NULL DEFAULT '' COMMENT '客户端平台',
   `F_lang`         varchar(64) NOT NULL DEFAULT '' COMMENT '客户端语言',
+  `F_ip_addr`      int(10) unsigned NOT NULL DEFAULT '0' COMMENT '客户端ipv4地址信息',
   `F_visit_time`   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '访问时间',
     
   PRIMARY KEY (`F_increment_id`),
