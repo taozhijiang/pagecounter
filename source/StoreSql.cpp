@@ -53,26 +53,74 @@ bool StoreSql::init() {
         return false;
     }
 
+    // 加载数据
+    std::string sql;
+    roo::sql_conn_ptr conn;
+    std::vector<std::string> result;
+
+    sql_pool_ptr_->request_scoped_conn(conn);
+    if (!conn) {
+        roo::log_err("request sql conn failed!");
+        return false;
+    }
+
+    // user_agent 缓存
+    sql = roo::va_format("SELECT F_user_agent_real FROM %s.t_user_agent_map;", database_.c_str());
+    if (!conn->sqlconn_execute_query_multi(sql, result)) {
+        roo::log_err("select %s failed.", sql.c_str());
+        return false;
+    }
+    std::set<std::string> tmp_set(result.cbegin(), result.cend());
+    user_agent_cache_.swap(tmp_set);
+    roo::log_warning("total load %lu count user_agents.", user_agent_cache_.size());
+    result.clear();
+
+    // host uri 缓存
+    sql = roo::va_format("SELECT DISTINCT(F_host) FROM %s.t_uri_map", database_.c_str());
+    if (!conn->sqlconn_execute_query_multi(sql, result)) {
+        roo::log_err("select %s failed.", sql.c_str());
+        return false;
+    }
+    for (size_t i=0; i<result.size(); ++i) {
+
+        std::string host = result[i];
+        std::vector<std::string> uris;
+
+        sql = roo::va_format("SELECT F_uri_real FROM %s.t_uri_map WHERE F_host='%s';",
+                             database_.c_str(), host.c_str());
+        if (!conn->sqlconn_execute_query_multi(sql, uris)) {
+            roo::log_err("select %s failed.", sql.c_str());
+            return false;
+        }
+
+        uri_cache_[host] = HashSetType(uris.cbegin(), uris.cend());
+        roo::log_warning("total load %lu uris for host %s.",uri_cache_[host].size() ,host.c_str());
+    }
+
     return true;
 }
 
 void StoreSql::check_uri_digest(const std::string& host, const std::string& uri) {
 
+    std::lock_guard<std::mutex> lock(lock_);
+    auto iter = uri_cache_.find(host);
+    if (iter == uri_cache_.cend()) {
+        uri_cache_[host] = HashSetType();
+        iter = uri_cache_.find(host);
+    }
+
+    if (iter->second.find(uri) != iter->second.end())
+        return;
+
+    // 执行插入操作
     std::string sql;
     roo::sql_conn_ptr conn;
-    roo::shared_result_ptr result;
 
     sql_pool_ptr_->request_scoped_conn(conn);
     if (!conn) {
         roo::log_err("request sql conn failed!");
         return;
     }
-
-    sql = roo::va_format("SELECT 1 FROM %s.t_uri_map WHERE F_host = '%s' AND F_uri_digest = UNHEX(MD5('%s'))",
-                         database_.c_str(), host.c_str(), uri.c_str());
-    result.reset(conn->sqlconn_execute_query(sql));
-    if (result && result->rowsCount() != 0)
-        return;
 
     // 插入
     sql = roo::va_format("INSERT INTO %s.t_uri_map SET "
@@ -80,13 +128,19 @@ void StoreSql::check_uri_digest(const std::string& host, const std::string& uri)
                          database_.c_str(), host.c_str(), uri.c_str(), uri.c_str());
     conn->sqlconn_execute_update(sql);
     roo::log_info("insert %s for host %s", uri.c_str(), host.c_str());
+
+    iter->second.insert(uri);
 }
 
 void StoreSql::check_user_agent_digest(const std::string& user_agent) {
 
+    std::lock_guard<std::mutex> lock(lock_);
+    if (user_agent_cache_.find(user_agent) != user_agent_cache_.end())
+        return;
+
+    // 执行插入
     std::string sql;
     roo::sql_conn_ptr conn;
-    roo::shared_result_ptr result;
 
     sql_pool_ptr_->request_scoped_conn(conn);
     if (!conn) {
@@ -94,18 +148,13 @@ void StoreSql::check_user_agent_digest(const std::string& user_agent) {
         return;
     }
 
-    sql = roo::va_format("SELECT 1 FROM %s.t_user_agent_map WHERE F_user_agent_digest = UNHEX(MD5('%s'))",
-                         database_.c_str(), user_agent.c_str());
-    result.reset(conn->sqlconn_execute_query(sql));
-    if (result && result->rowsCount() != 0)
-        return;
-
-    // 插入
     sql = roo::va_format("INSERT INTO %s.t_user_agent_map SET "
                          "F_user_agent_digest = UNHEX(MD5('%s')), F_user_agent_real = '%s', F_create_time=NOW()",
                          database_.c_str(), user_agent.c_str(), user_agent.c_str());
     conn->sqlconn_execute_update(sql);
     roo::log_info("insert user_agent %s", user_agent.c_str());
+
+    user_agent_cache_.insert(user_agent);
 }
 
 
@@ -163,24 +212,20 @@ int64_t StoreSql::select_visit_stat(int64_t id, const std::string& host) {
     roo::sql_conn_ptr conn;
     int64_t ret_count = -1;
 
-    do {
-        sql_pool_ptr_->request_scoped_conn(conn);
-        if (!conn) {
-            roo::log_err("request sql conn failed!");
-            break;
-        }
+    sql_pool_ptr_->request_scoped_conn(conn);
+    if (!conn) {
+        roo::log_err("request sql conn failed!");
+        return -1;
+    }
 
-        sql = roo::va_format(" SELECT SUM(F_count) FROM %s.t_visit_summary "
-                             " WHERE F_id=%ld AND F_host='%s'; ",
-                             database_.c_str(), id, host.c_str());
+    sql = roo::va_format(" SELECT SUM(F_count) FROM %s.t_visit_summary "
+                         " WHERE F_id=%ld AND F_host='%s'; ",
+                         database_.c_str(), id, host.c_str());
 
-        roo::shared_result_ptr result;
-        result.reset(conn->sqlconn_execute_query(sql));
-        if (result && result->next()) {
-            roo::cast_raw_value(result, 1, ret_count);
-        }
-
-    } while (0);
+    if (!conn->sqlconn_execute_query_value(sql, ret_count)) {
+        roo::log_err("select %s failed.", sql.c_str());
+        return -1;
+    }
 
     return ret_count;
 }
@@ -190,40 +235,34 @@ int64_t StoreSql::select_visit_stat(int64_t id, const std::string& host) {
 int64_t StoreSql::select_visit_stat(int64_t id, const std::string& host, const std::string& uri,
                                     int64_t& cur_count) {
 
-    roo::sql_conn_ptr conn;
-    roo::shared_result_ptr result;
     std::string sql;
+    roo::sql_conn_ptr conn;
 
     int64_t ret_count = -1;
 
-    do {
-        sql_pool_ptr_->request_scoped_conn(conn);
-        if (!conn) {
-            roo::log_err("request sql conn failed!");
-            break;
-        }
+    sql_pool_ptr_->request_scoped_conn(conn);
+    if (!conn) {
+        roo::log_err("request sql conn failed!");
+        return -1;
+    }
 
-        sql = roo::va_format(" SELECT F_count FROM %s.t_visit_summary "
-                             " WHERE F_id=%ld AND F_host='%s' AND F_uri_digest=UNHEX(MD5('%s')); ",
-                             database_.c_str(), id, host.c_str(), uri.c_str());
-        result.reset(conn->sqlconn_execute_query(sql));
-        if (result && result->next()) {
-            roo::cast_raw_value(result, 1, cur_count);
-        } else {
-            cur_count = 0;
-        }
+    sql = roo::va_format(" SELECT F_count FROM %s.t_visit_summary "
+                         " WHERE F_id=%ld AND F_host='%s' AND F_uri_digest=UNHEX(MD5('%s')); ",
+                         database_.c_str(), id, host.c_str(), uri.c_str());
 
-        // 总数
-        sql = roo::va_format(" SELECT IFNULL(SUM(F_count), 0) FROM %s.t_visit_summary "
-                             " WHERE F_id=%ld AND F_host='%s'; ",
-                             database_.c_str(), id, host.c_str());
+    if (!conn->sqlconn_execute_query_value(sql, cur_count)) {
+        cur_count = 0;
+    }
 
-        result.reset(conn->sqlconn_execute_query(sql));
-        if (result && result->next()) {
-            roo::cast_raw_value(result, 1, ret_count);
-        }
+    // 总数
+    sql = roo::va_format(" SELECT IFNULL(SUM(F_count), 0) FROM %s.t_visit_summary "
+                         " WHERE F_id=%ld AND F_host='%s'; ",
+                         database_.c_str(), id, host.c_str());
 
-    } while (0);
+    if (!conn->sqlconn_execute_query_value(sql, ret_count)) {
+        roo::log_err("select %s failed.", sql.c_str());
+        ret_count = -1;
+    }
 
     return ret_count;
 }
