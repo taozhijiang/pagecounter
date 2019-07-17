@@ -84,7 +84,7 @@ set (EXTRA_LIBS ${EXTRA_LIBS} glog_syslog )
 
 # 某些库需要静态全连接，否则主服务没使用但是so使用，会报符号没有找到
 target_link_libraries(
-    page_counter_service -lrt
+    page_counter_service -lrt -ldl
     ${EXTRA_LIBS}
 )
 

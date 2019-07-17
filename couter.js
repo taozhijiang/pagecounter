@@ -1,11 +1,11 @@
 
 // url   POST destination address
-// id    account_id
+// id    site_id
 // elem  element, update its innerTHML
 function counter_report(url, id, elem) {
 
     var post_data = {
-        "id"    : id,
+        "site_id"  : id,
         "host"  : window.location.host,
         "uri"   : window.location.pathname,
         "proto" : window.location.protocol,
@@ -20,6 +20,8 @@ function counter_report(url, id, elem) {
     var xhr = new XMLHttpRequest();
     xhr.open("POST", url, true);
     xhr.setRequestHeader('Content-type','application/json; charset=utf-8');
+    // 增加Reserved-Header1到HTTP头部，可以进行负载均衡
+    xhr.setRequestHeader('Reserved-Header1', id);
 
     xhr.onload = function () {
         if (xhr.readyState == 4 && xhr.status == "200") {

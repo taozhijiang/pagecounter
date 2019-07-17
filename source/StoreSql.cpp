@@ -66,7 +66,7 @@ bool StoreSql::init() {
 
     // user_agent 缓存
     sql = roo::va_format("SELECT F_user_agent_real FROM %s.t_user_agent_map;", database_.c_str());
-    if (!conn->sqlconn_execute_query_multi(sql, result)) {
+    if (!conn->select_multi(sql, result)) {
         roo::log_err("select %s failed.", sql.c_str());
         return false;
     }
@@ -77,7 +77,7 @@ bool StoreSql::init() {
 
     // host uri 缓存
     sql = roo::va_format("SELECT DISTINCT(F_host) FROM %s.t_uri_map", database_.c_str());
-    if (!conn->sqlconn_execute_query_multi(sql, result)) {
+    if (!conn->select_multi(sql, result)) {
         roo::log_err("select %s failed.", sql.c_str());
         return false;
     }
@@ -88,7 +88,7 @@ bool StoreSql::init() {
 
         sql = roo::va_format("SELECT F_uri_real FROM %s.t_uri_map WHERE F_host='%s';",
                              database_.c_str(), host.c_str());
-        if (!conn->sqlconn_execute_query_multi(sql, uris)) {
+        if (!conn->select_multi(sql, uris)) {
             roo::log_err("select %s failed.", sql.c_str());
             return false;
         }
@@ -126,7 +126,7 @@ void StoreSql::check_uri_digest(const std::string& host, const std::string& uri)
     sql = roo::va_format("INSERT INTO %s.t_uri_map SET "
                          "F_host = '%s', F_uri_digest = UNHEX(MD5('%s')), F_uri_real = '%s', F_create_time=NOW()",
                          database_.c_str(), host.c_str(), uri.c_str(), uri.c_str());
-    conn->sqlconn_execute_update(sql);
+    conn->execute_update(sql);
     roo::log_info("insert %s for host %s", uri.c_str(), host.c_str());
 
     iter->second.insert(uri);
@@ -151,7 +151,7 @@ void StoreSql::check_user_agent_digest(const std::string& user_agent) {
     sql = roo::va_format("INSERT INTO %s.t_user_agent_map SET "
                          "F_user_agent_digest = UNHEX(MD5('%s')), F_user_agent_real = '%s', F_create_time=NOW()",
                          database_.c_str(), user_agent.c_str(), user_agent.c_str());
-    conn->sqlconn_execute_update(sql);
+    conn->execute_update(sql);
     roo::log_info("insert user_agent %s", user_agent.c_str());
 
     user_agent_cache_.insert(user_agent);
@@ -185,7 +185,7 @@ int StoreSql::insert_visit_event(const struct visit_info& stat) {
         stat.origin_.c_str(), stat.browser_.c_str(), stat.platf_.c_str(),
         stat.lang_.c_str(), stat.remote_.c_str());
 
-    int affected = conn->sqlconn_execute_update(sql);
+    int affected = conn->execute_update(sql);
     if (affected != 1) {
         roo::log_err("insert visit event failed: %s.", stat.str().c_str());
     }
@@ -196,7 +196,7 @@ int StoreSql::insert_visit_event(const struct visit_info& stat) {
         " SET F_id=%ld, F_host='%s', F_uri_digest=UNHEX(MD5('%s')), F_count=1 "
         " ON DUPLICATE KEY UPDATE F_count = F_count + 1",
         database_.c_str(), stat.id_, stat.host_.c_str(), stat.uri_.c_str());
-    affected = conn->sqlconn_execute_update(sql);
+    affected = conn->execute_update(sql);
 
     if (affected != 1 && affected != 2) {
         roo::log_err("update %s.t_visit_summary failed.", database_.c_str());
@@ -222,7 +222,7 @@ int64_t StoreSql::select_visit_stat(int64_t id, const std::string& host) {
                          " WHERE F_id=%ld AND F_host='%s'; ",
                          database_.c_str(), id, host.c_str());
 
-    if (!conn->sqlconn_execute_query_value(sql, ret_count)) {
+    if (!conn->select_one(sql, ret_count)) {
         roo::log_err("select %s failed.", sql.c_str());
         return -1;
     }
@@ -250,7 +250,7 @@ int64_t StoreSql::select_visit_stat(int64_t id, const std::string& host, const s
                          " WHERE F_id=%ld AND F_host='%s' AND F_uri_digest=UNHEX(MD5('%s')); ",
                          database_.c_str(), id, host.c_str(), uri.c_str());
 
-    if (!conn->sqlconn_execute_query_value(sql, cur_count)) {
+    if (!conn->select_one(sql, cur_count)) {
         cur_count = 0;
     }
 
@@ -259,7 +259,7 @@ int64_t StoreSql::select_visit_stat(int64_t id, const std::string& host, const s
                          " WHERE F_id=%ld AND F_host='%s'; ",
                          database_.c_str(), id, host.c_str());
 
-    if (!conn->sqlconn_execute_query_value(sql, ret_count)) {
+    if (!conn->select_one(sql, ret_count)) {
         roo::log_err("select %s failed.", sql.c_str());
         ret_count = -1;
     }

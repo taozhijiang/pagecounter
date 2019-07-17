@@ -20,13 +20,13 @@ int jssource_get_handler(const tzhttpd::HttpParser& http_parser,
                          std::string& response, std::string& status_line, std::vector<std::string>& add_header) {
 
     const std::string js_source =
-        " // url   POST destination address                 \n "
-        " // id    account_id                               \n "
-        " // elem  element, update its innerTHML            \n "
+        " // url              POST destination address      \n "
+        " // id               site_id                       \n "
+        " // elem             element, update its innerTHML \n "
         " function counter_report(url, id, elem) {          \n "
         "                                                   \n "
         "     var post_data = {                             \n "
-        "         'id'    : id,                             \n "
+        "         'site_id'  : id,                          \n "
         "         'host'  : window.location.host,           \n "
         "         'uri'   : window.location.pathname,       \n "
         "         'proto' : window.location.protocol,       \n "
@@ -41,6 +41,8 @@ int jssource_get_handler(const tzhttpd::HttpParser& http_parser,
         "     var xhr = new XMLHttpRequest();               \n "
         "     xhr.open('POST', url, true);                  \n "
         "     xhr.setRequestHeader('Content-type','application/json; charset=utf-8'); \n "
+        "    // 增加customer_id到HTTP头部，可以进行负载均衡 \n "
+        "     xhr.setRequestHeader('Reserved-Header1', id); \n "
         "                                                   \n "
         "     xhr.onload = function () {                    \n "
         "         if (xhr.readyState == 4 && xhr.status == '200') { \n "
@@ -76,7 +78,7 @@ int counter_post_handler(const tzhttpd::HttpParser& http_parser, const std::stri
             return 1;
         }
 
-        if (root.isMember("id") && root["id"].isInt64() &&
+        if (root.isMember("site_id") && root["site_id"].isInt64() &&
             root.isMember("host") && root["host"].isString() &&
             root.isMember("uri") && root["uri"].isString()) {
             // OK
@@ -86,7 +88,7 @@ int counter_post_handler(const tzhttpd::HttpParser& http_parser, const std::stri
         }
 
         visit_info info{};
-        info.id_   = root["id"].asInt64();
+        info.id_   = root["site_id"].asInt64();
         info.host_ = root["host"].asString();
         info.uri_  = root["uri"].asString();
 
